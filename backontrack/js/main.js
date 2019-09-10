@@ -31,6 +31,16 @@ let HALF_TRACK_WIDTH = 60;
 let AIRCRAFT_WIDTH = 160;
 let AIRCRAFT_HEIGHT = 160;
 let FLY_SPEED = 3;
+// Game hints
+let HINT_HOMEPAGE1 = "Click on an airplane to control.";
+let HINT_HOMEPAGE2 = "Use A / D or arrow keys left / right to adjust the direction.";
+let HINT_HOMEPAGE3 = "Enter the runway with a suitable angle for landing.";
+let HINT_HOMEPAGE4 = "Press ENTER to start.";
+let HINT_START = "HINT: Avoid crash! Avoid signal lost!";
+let HINT_RAINBOW = "A Rainbow Airplane! Get it landed to score more.";
+let HINT_OVER = "GAME OVER!!!";
+let HINT_SCORE = "You scored ";
+let HINT_AGAIN = "Press ENTER to play again.";
 // 0: homepage, 1: game, 2: gameover
 var state = 0;
 var lostColor = COLOR_SAFE;
@@ -40,10 +50,12 @@ var slctedAcft = null;
 var message = false;
 // 0: not showed yet, 1: first time showing, 2: showed
 var rainbowMsg = 0;
-var showGameOver = false;
 var score = 0;
 var lost = 0;
 var fire;
+var tCount = 0,
+    hintCounter = 0,
+    rainbowCounter = 0;
 
 /**
  * Override collision function 
@@ -70,8 +82,22 @@ load(
     'fire.png'
 ).then(function() {
     /**
-     * Background setup
+     * Game homepage setup
      */
+    function drawHomepage() {
+        let title = imageAssets['title'];
+        titleX = HALF_WIDTH - title.width * 10;
+        titleY = HALF_HEIGHT - title.height * 10 - AIRCRAFT_HEIGHT - 20;
+        ctx.drawImage(title, titleX, titleY, title.width * 20, title.height * 20);
+        ctx.font = "60px arial";
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = "center";
+        ctx.fillText(HINT_HOMEPAGE1, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 20);
+        ctx.fillText(HINT_HOMEPAGE2, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 120);
+        ctx.fillText(HINT_HOMEPAGE3, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 220);
+        ctx.fillText(HINT_HOMEPAGE4, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 320);
+    }
+
     let homepageAcft = Sprite({
         x: 0,
         y: HALF_HEIGHT,
@@ -82,86 +108,13 @@ load(
         image: imageAssets['unselected']
     });
 
-    function drawHomepage() {
-        let title = imageAssets['title'];
-        titleX = HALF_WIDTH - title.width * 10;
-        titleY = HALF_HEIGHT - title.height * 10 - AIRCRAFT_HEIGHT - 20;
-        ctx.drawImage(title, titleX, titleY, title.width * 20, title.height * 20);
-        ctx.font = "60px arial";
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = "center";
-        ctx.fillText("Click on an airplane to control.",
-            HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 20);
-        ctx.fillText("Use A / D or arrow keys left / right to adjust the direction.",
-            HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 120);
-        ctx.fillText("Enter the runway with a suitable angle for landing.",
-            HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 220);
-        ctx.fillText("Press ENTER to start.",
-            HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 320);
-    }
-
+    /**
+     * Game background objects setup
+     */
     function drawSea() {
         ctx.drawImage(imageAssets['sea'], 0, 0, canvas.width * 0.3, canvas.height);
     }
 
-    function drawTower() {
-        let tower = imageAssets['tower'];
-        towerW = tower.width * 15;
-        towerH = tower.height * 15;
-        towerX = canvas.width * 0.75;
-        towerY = (HALF_HEIGHT - HALF_TRACK_WIDTH - towerH) * 0.8;
-        ctx.drawImage(tower, towerX, towerY, towerW, towerH);
-    }
-
-    function drawScoreAndLost() {
-        ctx.font = "60px arial";
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = "right";
-        ctx.fillText("Score: " + score, canvas.width - 20, 80);
-        ctx.fillStyle = lostColor;
-        ctx.textAlign = "right";
-        ctx.fillText("Lost: " + lost, canvas.width - 20, 160);
-    }
-
-    function showCenterHint(hint, y) {
-        ctx.font = "40px arial";
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = "center";
-        ctx.fillText(hint, canvas.width / 2, y);
-    }
-
-    function drawFire(fire) {
-        let fireImg = imageAssets['fire'];
-        ctx.drawImage(fireImg, fire[0] - AIRCRAFT_WIDTH / 2, fire[1] - AIRCRAFT_HEIGHT / 2,
-            AIRCRAFT_WIDTH, AIRCRAFT_HEIGHT);
-        ctx.drawImage(fireImg, fire[2] - AIRCRAFT_WIDTH / 2, fire[3] - AIRCRAFT_HEIGHT / 2,
-            AIRCRAFT_WIDTH, AIRCRAFT_HEIGHT);
-    }
-
-    function showGameOver() {
-        ctx.font = "80px arial";
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = "center";
-        ctx.fillText("GAME OVER!!!", canvas.width / 2, 160);
-        ctx.fillText("Press ENTER to play again.", canvas.width / 2, 320);
-    }
-
-    function reset() {
-        lostColor = COLOR_SAFE;
-        interval = 360;
-        aircrafts = [];
-        slctedAcft = null;
-        message = false;
-        rainbowMsg = 0;
-        showGameOver = false;
-        score = 0;
-        lost = 0;
-        fire = null;
-    }
-
-    /**
-     * Track setup
-     */
     function drawTracks() {
         head = canvas.width * 0.3;
         ctx.lineWidth = 10;
@@ -184,6 +137,68 @@ load(
             head += 60;
             ctx.stroke();
         }
+    }
+
+    function drawTower() {
+        let tower = imageAssets['tower'];
+        towerW = tower.width * 15;
+        towerH = tower.height * 15;
+        towerX = canvas.width * 0.75;
+        towerY = (HALF_HEIGHT - HALF_TRACK_WIDTH - towerH) * 0.8;
+        ctx.drawImage(tower, towerX, towerY, towerW, towerH);
+    }
+
+    /**
+     * Game hint & info setup
+     */
+    function drawScoreAndLost() {
+        ctx.font = "60px arial";
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = "right";
+        ctx.fillText("Score: " + score, canvas.width - 20, 80);
+        ctx.fillStyle = lostColor;
+        ctx.textAlign = "right";
+        ctx.fillText("Lost: " + lost, canvas.width - 20, 160);
+    }
+
+    function showCenterHint(hint, y) {
+        ctx.font = "40px arial";
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = "center";
+        ctx.fillText(hint, canvas.width / 2, y);
+    }
+
+    /**
+     * Game over setup
+     */
+    function drawFire(fire) {
+        let fireImg = imageAssets['fire'];
+        ctx.drawImage(fireImg, fire[0] - AIRCRAFT_WIDTH / 2, fire[1] - AIRCRAFT_HEIGHT / 2,
+            AIRCRAFT_WIDTH, AIRCRAFT_HEIGHT);
+        ctx.drawImage(fireImg, fire[2] - AIRCRAFT_WIDTH / 2, fire[3] - AIRCRAFT_HEIGHT / 2,
+            AIRCRAFT_WIDTH, AIRCRAFT_HEIGHT);
+    }
+
+    function showGameOver() {
+        ctx.font = "80px arial";
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = "center";
+        ctx.fillText(HINT_OVER, canvas.width / 2, 160);
+        ctx.fillText(HINT_SCORE + score, canvas.width / 2, 320);
+        ctx.fillText(HINT_AGAIN, canvas.width / 2, 480);
+    }
+
+    function reset() {
+        state = 1;
+        lostColor = COLOR_SAFE;
+        interval = 360;
+        aircrafts = [];
+        slctedAcft = null;
+        message = false;
+        rainbowMsg = 0;
+        score = 0;
+        lost = 0;
+        tCount = 0;
     }
 
     /**
@@ -244,7 +259,7 @@ load(
     /**
      * Aircrafts setup
      */
-    function addAcft() {
+    function getRandProp() {
         var x, y, rotation;
         // topleft:0, topright:1, bottomleft:2, bottomright:3
         let mode = Math.floor(Math.random() * 4);
@@ -296,6 +311,14 @@ load(
                 y = HALF_HEIGHT;
                 rotation = 0;
         };
+        return [x, y, rotation];
+    }
+
+    function addAcft() {
+        let props = getRandProp();
+        let x = props[0],
+            y = props[1],
+            rotation = props[2];
         let newAcft = Sprite({
             x: x,
             y: y,
@@ -386,7 +409,8 @@ load(
                     acft.scored = true;
                 }
             }
-            if (!(acft.x >= 0 && acft.x <= canvas.width && acft.y >= 0 && acft.y <= canvas.height)) {
+            if (!(acft.x >= 0 && acft.x <= canvas.width
+                    && acft.y >= 0 && acft.y <= canvas.height)) {
                 if (acft.selected) {
                     slctedAcft = null;
                 }
@@ -410,7 +434,8 @@ load(
     function renderAllAcfts() {
         aircrafts.forEach(function(acft, i) {
             aircrafts.forEach(function(acftelse, j) {
-                if (i != j && !acft.landed && !acftelse.landed && acftelse.collidesWith(acft)) {
+                if (i != j && !acft.landed && !acftelse.landed
+                        && acftelse.collidesWith(acft)) {
                     fire = [acft.x, acft.y, acftelse.x, acftelse.y];
                     // Game Exit
                     state = 2;
@@ -446,9 +471,6 @@ load(
     /**
      * Game loop
      */
-    let tCount = 0;
-    let hintCounter = 0;
-    let rainbowCounter = 0;
     let loop = GameLoop({
         update: function() {
             if (state == 0) {
@@ -484,7 +506,6 @@ load(
                 homepageAcft.render();
             } else if (state == 2) {
                 if (keyPressed('enter')) {
-                    state = 1;
                     reset();
                     addAcft();
                 }
@@ -503,12 +524,12 @@ load(
                 }
                 renderAllAcfts();
                 if (hintCounter < 480) {
-                    showCenterHint("HINT: Avoid crash! Avoid signal lost!", 60)
+                    showCenterHint(HINT_START, 60)
                     hintCounter += 1;
                 }
                 if (rainbowMsg == 1) {
                     if (rainbowCounter < 480) {
-                        showCenterHint("A Rainbow Airplane! Get it landed to score more.", 120);
+                        showCenterHint(HINT_RAINBOW, 120);
                         rainbowCounter += 1;
                     } else {
                         rainbowMsg += 1;
