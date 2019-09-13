@@ -27,10 +27,9 @@ let COLOR_WARNING = '#f0ad4e';
 let COLOR_DANGER = '#d9534f';
 let HALF_WIDTH = canvas.width / 2;
 let HALF_HEIGHT = canvas.height / 2;
-let HALF_TRACK_WIDTH = 60;
-let AIRCRAFT_WIDTH = 160;
-let AIRCRAFT_HEIGHT = 160;
-let FLY_SPEED = 3;
+let HALF_TRACK_WIDTH = canvas.height / 30;
+let AIRCRAFT_SIZE = canvas.height / 10;
+let FLY_SPEED = canvas.width / 960;
 // Game hints
 let HINT_HOMEPAGE1 = "Click on an airplane to control.";
 let HINT_HOMEPAGE2 = "Use A / D or arrow keys left / right to adjust the direction.";
@@ -38,7 +37,8 @@ let HINT_HOMEPAGE3 = "Enter the runway with a suitable angle for landing.";
 let HINT_HOMEPAGE4 = "Press ENTER to start.";
 let HINT_START = "HINT: Avoid crash! Avoid signal lost!";
 let HINT_RAINBOW = "A Rainbow Airplane! Get it landed to score more.";
-let HINT_OVER = "GAME OVER!!!";
+let MSG_CRASH = "Crashed! GAME OVER!!!"
+let MSG_LOST = "Too many losts! YOU ARE FIRED!!!"
 let HINT_SCORE = "You scored ";
 let HINT_AGAIN = "Press ENTER to play again.";
 // 0: homepage, 1: game, 2: gameover
@@ -48,14 +48,16 @@ var interval = 360;
 var aircrafts = [];
 var slctedAcft = null;
 var message = false;
+var gameOverMsg = "";
 // 0: not showed yet, 1: first time showing, 2: showed
 var rainbowMsg = 0;
 var score = 0;
 var lost = 0;
+var crashed = false;
 var fire;
 var tCount = 0,
     hintCounter = 0,
-    rainbowCounter = 0;
+    rainbowHintCounter = 0;
 
 /**
  * Override collision function 
@@ -64,7 +66,7 @@ function collidesWith(object) {
     let dx = this.x - object.x;
     let dy = this.y - object.y;
     let distance = Math.sqrt(dx * dx + dy * dy);
-    return distance < 144;
+    return distance < AIRCRAFT_SIZE * 0.9;
 }
 
 /**
@@ -87,15 +89,15 @@ load(
     function drawHomepage() {
         let title = imageAssets['title'];
         titleX = HALF_WIDTH - title.width * 10;
-        titleY = HALF_HEIGHT - title.height * 10 - AIRCRAFT_HEIGHT - 20;
+        titleY = HALF_HEIGHT - title.height * 10 - AIRCRAFT_SIZE - 20;
         ctx.drawImage(title, titleX, titleY, title.width * 20, title.height * 20);
         ctx.font = "60px arial";
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = "center";
-        ctx.fillText(HINT_HOMEPAGE1, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 20);
-        ctx.fillText(HINT_HOMEPAGE2, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 120);
-        ctx.fillText(HINT_HOMEPAGE3, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 220);
-        ctx.fillText(HINT_HOMEPAGE4, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_HEIGHT + 320);
+        ctx.fillText(HINT_HOMEPAGE1, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_SIZE + 20);
+        ctx.fillText(HINT_HOMEPAGE2, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_SIZE + 120);
+        ctx.fillText(HINT_HOMEPAGE3, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_SIZE + 220);
+        ctx.fillText(HINT_HOMEPAGE4, HALF_WIDTH, HALF_HEIGHT + AIRCRAFT_SIZE + 320);
     }
 
     let homepageAcft = Sprite({
@@ -103,8 +105,8 @@ load(
         y: HALF_HEIGHT,
         anchor: {x:1, y:0.5},
         dx: 5,
-        width: AIRCRAFT_WIDTH,
-        height: AIRCRAFT_HEIGHT,
+        width: AIRCRAFT_SIZE,
+        height: AIRCRAFT_SIZE,
         image: imageAssets['unselected']
     });
 
@@ -173,17 +175,17 @@ load(
      */
     function drawFire(fire) {
         let fireImg = imageAssets['fire'];
-        ctx.drawImage(fireImg, fire[0] - AIRCRAFT_WIDTH / 2, fire[1] - AIRCRAFT_HEIGHT / 2,
-            AIRCRAFT_WIDTH, AIRCRAFT_HEIGHT);
-        ctx.drawImage(fireImg, fire[2] - AIRCRAFT_WIDTH / 2, fire[3] - AIRCRAFT_HEIGHT / 2,
-            AIRCRAFT_WIDTH, AIRCRAFT_HEIGHT);
+        ctx.drawImage(fireImg, fire[0] - AIRCRAFT_SIZE / 2, fire[1] - AIRCRAFT_SIZE / 2,
+            AIRCRAFT_SIZE, AIRCRAFT_SIZE);
+        ctx.drawImage(fireImg, fire[2] - AIRCRAFT_SIZE / 2, fire[3] - AIRCRAFT_SIZE / 2,
+            AIRCRAFT_SIZE, AIRCRAFT_SIZE);
     }
 
-    function showGameOver() {
+    function showGameOver(gameOverMsg) {
         ctx.font = "80px arial";
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = "center";
-        ctx.fillText(HINT_OVER, canvas.width / 2, 160);
+        ctx.fillText(gameOverMsg, canvas.width / 2, 160);
         ctx.fillText(HINT_SCORE + score, canvas.width / 2, 320);
         ctx.fillText(HINT_AGAIN, canvas.width / 2, 480);
     }
@@ -196,6 +198,7 @@ load(
         slctedAcft = null;
         message = false;
         rainbowMsg = 0;
+        crashed = false;
         score = 0;
         lost = 0;
         tCount = 0;
@@ -260,6 +263,7 @@ load(
      * Aircrafts setup
      */
     function getRandProp() {
+        // Get random direction and position
         var x, y, rotation;
         // topleft:0, topright:1, bottomleft:2, bottomright:3
         let mode = Math.floor(Math.random() * 4);
@@ -323,8 +327,8 @@ load(
             x: x,
             y: y,
             anchor: {x: 0.5, y: 0.5},
-            width: AIRCRAFT_WIDTH,
-            height: AIRCRAFT_HEIGHT,
+            width: AIRCRAFT_SIZE,
+            height: AIRCRAFT_SIZE,
             rotation: rotation,
             rainbow: false,
             landed: false,
@@ -402,15 +406,15 @@ load(
                 startLanding(acft);
                 if (!acft.scored) {
                     if (acft.rainbow) {
-                        score += 5;
+                        score += 3;
                     } else {
                         score += 1;
                     }
                     acft.scored = true;
                 }
             }
-            if (!(acft.x >= 0 && acft.x <= canvas.width
-                    && acft.y >= 0 && acft.y <= canvas.height)) {
+            if (!(acft.x >= - AIRCRAFT_SIZE / 2 && acft.x <= canvas.width + AIRCRAFT_SIZE / 2
+                    && acft.y >= - AIRCRAFT_SIZE / 2 && acft.y <= canvas.height + AIRCRAFT_SIZE / 2)) {
                 if (acft.selected) {
                     slctedAcft = null;
                 }
@@ -422,6 +426,7 @@ load(
                         lostColor = COLOR_DANGER;
                     }
                     if (lost >= 5) {
+                        gameOverMsg = MSG_LOST;
                         // Game Exit
                         state = 2;
                     }
@@ -437,6 +442,8 @@ load(
                 if (i != j && !acft.landed && !acftelse.landed
                         && acftelse.collidesWith(acft)) {
                     fire = [acft.x, acft.y, acftelse.x, acftelse.y];
+                    gameOverMsg = MSG_CRASH;
+                    crashed = true;
                     // Game Exit
                     state = 2;
                 }
@@ -446,7 +453,7 @@ load(
     };
 
     function startLanding(acft) {
-        if (acft.width > 80) {
+        if (acft.width > AIRCRAFT_SIZE / 2) {
             acft.width *= 0.997;
             acft.height *= 0.997;
         }
@@ -474,11 +481,13 @@ load(
     let loop = GameLoop({
         update: function() {
             if (state == 0) {
+                // Homepage airplane
                 homepageAcft.update();
                 if (homepageAcft.x > canvas.width + homepageAcft.width) {
                     homepageAcft.x = 0;
                 }
             } else if (state == 1) {
+                // Playing
                 tCount += 1;
                 if (tCount >= interval) {
                     addAcft();
@@ -512,9 +521,12 @@ load(
                 drawSea();
                 drawTracks();
                 drawTower();
-                drawFire(fire);
-                showGameOver();
+                if (crashed) {
+                    drawFire(fire);
+                }
+                showGameOver(gameOverMsg);
             } else {
+                // Playing
                 drawTracks();
                 drawTower();
                 drawSea();
@@ -528,9 +540,9 @@ load(
                     hintCounter += 1;
                 }
                 if (rainbowMsg == 1) {
-                    if (rainbowCounter < 480) {
+                    if (rainbowHintCounter < 480) {
                         showCenterHint(HINT_RAINBOW, 120);
-                        rainbowCounter += 1;
+                        rainbowHintCounter += 1;
                     } else {
                         rainbowMsg += 1;
                     }
